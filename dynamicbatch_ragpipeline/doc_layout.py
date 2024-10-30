@@ -13,10 +13,7 @@ import torchvision
 import os
 import logging
 import time
-
-zoom_x = 3.0
-zoom_y = 3.0
-mat = pymupdf.Matrix(zoom_x, zoom_y)
+import sys
 
 id_to_names = {
     0: 'title', 
@@ -91,25 +88,56 @@ async def step():
                 futures[i].set_result((boxes, classes, scores))
 
         except Exception as e:
-            print(f"Error in step: {e}")
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            print(exc_type, fname, exc_tb.tb_lineno)
             futures = [batch[i][0] for i in range(len(batch))]
             for i in range(len(futures)):
                 if not futures[i].done():
                     futures[i].set_exception(e)
 
-async def predict(file, iou_threshold = 0.45, return_image = True, request = None):
+async def predict(
+    file, 
+    iou_threshold = 0.45, 
+    ratio_x = 2.0, 
+    ratio_y = 2.0, 
+    request = None,
+):
     request.scope['request']['before_time_taken'] = time.time()
     doc = pymupdf.open(file)
+    mat = pymupdf.Matrix(ratio_x, ratio_y)
     futures, images = [], []
+
+    
     for page in doc:
         pix = page.get_pixmap(matrix=mat)
         image = np.frombuffer(pix.samples_mv, dtype=np.uint8).reshape((pix.height, pix.width, 3)).copy()
-        future = asyncio.Future()
-        await step_queue.put((future, image))
-        futures.append(future)
         images.append(image)
+
+        if args.dynamic_batching:
+            future = asyncio.Future()
+            await step_queue.put((future, image))
+            futures.append(future)
     
-    results = await asyncio.gather(*futures)
+    request.scope['request']['toimage_time_taken'] = time.time() - request.scope['request']['before_time_taken']
+    
+    if args.dynamic_batching:
+        results = await asyncio.gather(*futures)
+    else:
+        results = []
+        det_res = model.predict(
+                images,
+                imgsz=1024,
+                conf=0.25,
+                device=device,
+                batch=len(images)
+            )
+
+        for i in range(len(det_res)):
+            boxes = det_res[i].__dict__['boxes'].xyxy
+            classes = det_res[i].__dict__['boxes'].cls
+            scores = det_res[i].__dict__['boxes'].conf
+            results.append((boxes, classes, scores))
 
     actual_results = []
     
@@ -126,38 +154,40 @@ async def predict(file, iou_threshold = 0.45, return_image = True, request = Non
             scores = np.expand_dims(scores, 0)
             classes = np.expand_dims(classes, 0)
 
+        image = Image.fromarray(images[i])
+        buffered = BytesIO()
+        image.save(buffered, format="JPEG")
+        img = base64.b64encode(buffered.getvalue()).decode("utf-8")
+
+        coordinates = boxes.int().cpu().numpy().tolist()
+        r = []
+        for c in coordinates:
+            x_min, y_min, x_max, y_max = c
+            r.append({
+                'x_min': x_min,
+                'y_min': y_min,
+                'x_max': x_max,
+                'y_max': y_max,
+            })
         d = {
             'classes': [id_to_names[int(c)] for c in classes],
+            'coordinates': r,
+            'img': img,
         }
-        coordinates = boxes.int().cpu().numpy().tolist()
-
-        if return_image:
-            cropped_images = []
-            for c in coordinates:
-                x_min, y_min, x_max, y_max = c
-                cropped_img = images[i][y_min:y_max, x_min:x_max]
-                image = Image.fromarray(cropped_img)
-                buffered = BytesIO()
-                image.save(buffered, format="JPEG")
-                img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-                cropped_images.append(img_str)
-            d['images'] = cropped_images
-
-        else:
-            r = []
-            for c in coordinates:
-                x_min, y_min, x_max, y_max = c
-                r.append({
-                    'x_min': x_min,
-                    'y_min': y_min,
-                    'x_max': x_max,
-                    'y_max': y_max,
-                })
-            d['coordinates'] = r
-        
         actual_results.append(d)
 
     request.scope['request']['total_page'] = len(futures)
     request.scope['request']['after_time_taken'] = time.time()
-    return actual_results
+    request.scope['request']['infer_time_taken'] = request.scope['request']['after_time_taken'] - request.scope['request']['before_time_taken']
+    
+    stats = {
+        'total_page': len(images),
+        'infer_time_taken': request.scope['request']['infer_time_taken'],
+        'toimage_time_taken': request.scope['request']['toimage_time_taken'],
+        'page_per_second': len(images) / request.scope['request']['infer_time_taken'],
+    }
+    return {
+        'result': actual_results,
+        'stats': stats,
+    }
 

@@ -98,13 +98,12 @@ async def hello_world():
 async def doc_layout(
     file: bytes = File(), 
     iou_threshold: float = Form(0.45),
-    return_image: bool = Form(False),
+    ratio_x: float = Form(2.0),
+    ratio_y: float = Form(2.0),
     request: Request = None,
 ):
     """
     Support pdf file, one file multiple pages.
-
-    If return_image is True, will return JPEG base64.
     """
 
     with tempfile.NamedTemporaryFile(suffix='.pdf') as temp_file:
@@ -113,23 +112,24 @@ async def doc_layout(
         r = await predict(
             temp_file, 
             iou_threshold = iou_threshold,
-            return_image = return_image,
+            ratio_x = ratio_x,
+            ratio_y = ratio_y,
             request = request
         )
         return r
 
+if args.dynamic_batching:
+    @app.on_event("startup")
+    async def startup_event():
+        app.state.background_step = asyncio.create_task(step())
 
-@app.on_event("startup")
-async def startup_event():
-    app.state.background_step = asyncio.create_task(step())
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    app.state.background_step.cancel()
-    try:
-        await app.state.background_step
-    except asyncio.CancelledError:
-        pass
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        app.state.background_step.cancel()
+        try:
+            await app.state.background_step
+        except asyncio.CancelledError:
+            pass
 
 if args.hotload:
     logging.info('hotloading the model')

@@ -31,6 +31,11 @@ def parse_arguments():
         help='Model type (default: %(default)s, env: MODEL_DOC_LAYOUT)'
     )
     parser.add_argument(
+        '--dynamic-batching', type=lambda x: x.lower() == 'true',
+        default=os.environ.get('DYNAMIC_BATCHING', 'true').lower() == 'true',
+        help='Enable dynamic batching (default: %(default)s, env: DYNAMIC_BATCHING)'
+    )
+    parser.add_argument(
         '--dynamic-batching-microsleep', type=float,
         default=float(os.environ.get('DYNAMIC_BATCHING_MICROSLEEP', '1e-4')),
         help='microsleep to group dynamic batching, 1 / 1e-4 = 10k steps for second (default: %(default)s, env: DYNAMIC_BATCHING_MICROSLEEP)'
