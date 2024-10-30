@@ -37,7 +37,7 @@ def parse_arguments():
     )
     parser.add_argument(
         '--dynamic-batching-batch-size', type=float,
-        default=int(os.environ.get('DYNAMIC_BATCHING_BATCH_SIZE', '10')),
+        default=int(os.environ.get('DYNAMIC_BATCHING_BATCH_SIZE', '20')),
         help='maximum of batch size during dynamic batching (default: %(default)s, env: DYNAMIC_BATCHING_BATCH_SIZE)'
     )
     parser.add_argument(

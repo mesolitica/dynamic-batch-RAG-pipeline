@@ -10,7 +10,6 @@ import time
 import torch
 import os
 import tempfile
-from xhtml2pdf import pisa
 from pathlib import Path
 from collections import deque
 
@@ -96,15 +95,28 @@ async def hello_world():
     return {'hello': 'world'}
 
 @app.post('/doc_layout')
-async def doc_layout(file: bytes = File(), request: Request = None):
+async def doc_layout(
+    file: bytes = File(), 
+    iou_threshold: float = Form(0.45),
+    return_image: bool = Form(False),
+    request: Request = None,
+):
     """
     Support pdf file, one file multiple pages.
+
+    If return_image is True, will return JPEG base64.
     """
 
     with tempfile.NamedTemporaryFile(suffix='.pdf') as temp_file:
         temp_file.write(file)
 
-        await predict(temp_file, request = request)
+        r = await predict(
+            temp_file, 
+            iou_threshold = iou_threshold,
+            return_image = return_image,
+            request = request
+        )
+        return r
 
 
 @app.on_event("startup")
