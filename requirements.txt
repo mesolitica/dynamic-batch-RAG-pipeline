@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+doclayout-yolo
+huggingface-hub
+torch
+torchvision
+python-multipart
+pymupdf
