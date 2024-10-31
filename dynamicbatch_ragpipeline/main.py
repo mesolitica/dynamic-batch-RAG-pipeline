@@ -1,3 +1,6 @@
+from fastapi import FastAPI, Request
+from fastapi import File, Form, UploadFile
+from sse_starlette import EventSourceResponse
 from dynamicbatch_ragpipeline.env import args
 from dynamicbatch_ragpipeline.doc_layout import (
     load_model as doc_layout_load_model, 
@@ -10,8 +13,7 @@ from dynamicbatch_ragpipeline.ocr import (
     prefill as ocr_prefill,
     step as ocr_step,
 )
-from fastapi import FastAPI, Request
-from fastapi import File, Form, UploadFile
+from dynamicbatch_ragpipeline.function import cleanup_cache
 import asyncio
 import logging
 import uvicorn
@@ -23,6 +25,12 @@ import tempfile
 from pathlib import Path
 from collections import deque
 
+
+HEADERS = {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive'
+}
 
 class InsertMiddleware:
     def __init__(self, app, max_concurrent=50):
@@ -65,9 +73,25 @@ class InsertMiddleware:
 
                     s = f"Complete {scope['request']['uuid']}, time taken {time_taken} seconds, Page per second {page_per_second}"
                     logging.info(s)
+                
+                if 'time_max_tokens' in scope['request']:
+                    time_taken_first_token = scope['request']['time_first_token'] - \
+                        scope['request']['after_queue']
+                    time_taken_max_tokens = scope['request']['time_max_tokens'] - \
+                        scope['request']['time_first_token']
+                    tps = scope['request']['total_tokens'] / time_taken_max_tokens
+
+                    s = f"Complete {scope['request']['uuid']}, time first token {time_taken_first_token} seconds, time taken {time_taken_max_tokens} seconds, TPS {tps}"
+                    logging.info(s)
+
             except asyncio.CancelledError:
                 logging.warning(f"Cancelling {scope['request']['uuid']} due to disconnect")
             finally:
+
+                if 'cache' in scope and scope['cache'] is not None:
+                    cleanup_cache(scope['cache'])
+                    scope.pop('cache', None)
+
                 torch.cuda.empty_cache()
     
     async def __call__(self, scope, receive, send):
@@ -131,28 +155,41 @@ async def doc_layout(
 @app.post('/ocr')
 async def ocr(
     image: bytes = File(), 
+    max_tokens: int = Form(4096),
     stream: bool = Form(False),
     request: Request = None,
 ):
-    pass
+    generator = ocr_predict(image, max_tokens = max_tokens, stream = stream, request = request)
+    r = await generator
+    if stream:
+        return EventSourceResponse(r, headers=HEADERS)
+    else:
+        return r
 
 
 if args.dynamic_batching:
     @app.on_event("startup")
     async def startup_event():
         app.state.background_doc_layout_step = asyncio.create_task(doc_layout_step())
+        app.state.background_ocr_prefill = asyncio.create_task(ocr_prefill())
+        app.state.background_ocr_step = asyncio.create_task(ocr_step())
 
     @app.on_event("shutdown")
     async def shutdown_event():
         app.state.background_doc_layout_step.cancel()
+        app.state.background_ocr_prefill.cancel()
+        app.state.background_ocr_step.cancel()
         try:
             await app.state.background_doc_layout_step
+            await app.state.background_ocr_prefill
+            await app.state.background_ocr_step
         except asyncio.CancelledError:
             pass
 
 if args.hotload:
     logging.info('hotloading the model')
     doc_layout_load_model()
+    ocr_load_model()
 
 if __name__ == "__main__":
     uvicorn.run(

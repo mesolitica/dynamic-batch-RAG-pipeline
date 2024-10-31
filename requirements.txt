@@ -6,3 +6,5 @@ torch
 torchvision
 python-multipart
 pymupdf
+verovio
+sse_starlette

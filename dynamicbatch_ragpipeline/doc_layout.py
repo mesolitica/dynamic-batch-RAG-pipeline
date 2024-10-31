@@ -88,13 +88,14 @@ async def step():
                 futures[i].set_result((boxes, classes, scores))
 
         except Exception as e:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            print(exc_type, fname, exc_tb.tb_lineno)
-            futures = [batch[i][0] for i in range(len(batch))]
-            for i in range(len(futures)):
-                if not futures[i].done():
-                    futures[i].set_exception(e)
+            logging.error(e)
+            try:
+                futures = [batch[i][0] for i in range(len(batch))]
+                for i in range(len(futures)):
+                    if not futures[i].done():
+                        futures[i].set_exception(e)
+            except:
+                pass
 
 async def predict(
     file, 
@@ -103,12 +104,14 @@ async def predict(
     ratio_y = 2.0, 
     request = None,
 ):
+    if model is None:
+        load_model()
+
     request.scope['request']['before_time_taken'] = time.time()
     doc = pymupdf.open(file)
     mat = pymupdf.Matrix(ratio_x, ratio_y)
     futures, images = [], []
 
-    
     for page in doc:
         pix = page.get_pixmap(matrix=mat)
         image = np.frombuffer(pix.samples_mv, dtype=np.uint8).reshape((pix.height, pix.width, 3)).copy()
