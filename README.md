@@ -1,10 +1,21 @@
 # dynamic-batch-RAG-pipeline
 
-Dynamic batching for Non-Causal models on Document Layout and OCR, suitable for RAG.
+Dynamic batching for Document Layout and OCR, suitable for RAG.
 
 1. Dynamic batch for SOTA Document Layout and OCR, suitable to serve better concurrency.
-2. Can serve user defined max concurrency.
-3. Disconnected signal, so this is to ensure early stop.
+2. Continous batching for Causal based OCR models.
+3. Can serve user defined max concurrency.
+4. Disconnected signal, so this is to ensure early stop.
+
+## Available models
+
+### Document Layout
+
+1. https://github.com/opendatalab/DocLayout-YOLO
+
+### OCR
+
+1. https://huggingface.co/stepfun-ai/GOT-OCR2_0
 
 ## how to install
 
@@ -19,6 +30,8 @@ Or you can git clone,
 ```bash
 git clone https://github.com/mesolitica/dynamic-batch-RAG-pipeline && cd dynamic-batch-RAG-pipeline
 ```
+
+**Yeah I know, repository name kinda sucks**.
 
 ## how to
 
@@ -73,13 +86,14 @@ curl -X 'POST' \
   -H 'accept: application/json' \
   -H 'Content-Type: multipart/form-data' \
   -F 'file=@stress-test/2310.01889v4.pdf;type=application/pdf' \
-  -F 'iou_threshold=0.45' \
-  -F 'return_image=false'
+  -F 'iou_threshold=0.45'
 ```
+
+Checkout [notebook/document-layout.ipynb](notebook/document-layout.ipynb).
 
 ## [Stress test](stress-test)
 
-### Document layour
+### Document layout
 
 Rate of 10 users per second, total requests up to 100 users for 60 seconds on a RTX 3090 Ti,
 

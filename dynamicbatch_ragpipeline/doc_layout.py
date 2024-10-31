@@ -55,7 +55,7 @@ async def step():
             batch = []
             while not step_queue.empty():
                 try:
-                    request = await asyncio.wait_for(step_queue.get(), timeout=1e-4)
+                    request = await asyncio.wait_for(step_queue.get(), timeout=1e-6)
                     batch.append(request)
                     if len(batch) >= args.dynamic_batching_batch_size:
                         need_sleep = False
@@ -160,18 +160,22 @@ async def predict(
         img = base64.b64encode(buffered.getvalue()).decode("utf-8")
 
         coordinates = boxes.int().cpu().numpy().tolist()
-        r = []
+        classes = [id_to_names[int(c)] for c in classes]
+        boxes = []
         for c in coordinates:
             x_min, y_min, x_max, y_max = c
-            r.append({
+            boxes.append({
                 'x_min': x_min,
                 'y_min': y_min,
                 'x_max': x_max,
                 'y_max': y_max,
             })
+        sorted_indices = sorted(range(len(boxes)), key=lambda i: (boxes[i]['y_min'], boxes[i]['x_min']))
+        sorted_boxes = [boxes[i] for i in sorted_indices]
+        sorted_classes = [classes[i] for i in sorted_indices]
         d = {
-            'classes': [id_to_names[int(c)] for c in classes],
-            'coordinates': r,
+            'classes': sorted_classes,
+            'coordinates': sorted_boxes,
             'img': img,
         }
         actual_results.append(d)

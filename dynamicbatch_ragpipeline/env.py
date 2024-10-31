@@ -31,6 +31,13 @@ def parse_arguments():
         help='Model type (default: %(default)s, env: MODEL_DOC_LAYOUT)'
     )
     parser.add_argument(
+        '--model-ocr',
+        default=os.environ.get(
+            'MODEL_OCR',
+            'got_ocr2_0'),
+        help='Model type (default: %(default)s, env: MODEL_OCR)'
+    )
+    parser.add_argument(
         '--dynamic-batching', type=lambda x: x.lower() == 'true',
         default=os.environ.get('DYNAMIC_BATCHING', 'true').lower() == 'true',
         help='Enable dynamic batching (default: %(default)s, env: DYNAMIC_BATCHING)'
@@ -67,7 +74,10 @@ def parse_arguments():
     args = parser.parse_args()
 
     if args.model_doc_layout not in {'yolo10'}:
-        raise ValueError('Currently document layout, `--model-doc-layout` or `MODEL_DOC_LAYOUT` environment variable, only support YOLO10.')
+        raise ValueError('Currently document layout, `--model-doc-layout` or `MODEL_DOC_LAYOUT` environment variable, only support https://github.com/opendatalab/DocLayout-YOLO')
+
+    if args.model_ocr not in {'got_ocr2_0'}:
+        raise ValueError('Currently OCR, `--model-ocr` or `MODEL_OCR` environment variable, only support https://huggingface.co/stepfun-ai/GOT-OCR2_0')
 
     return args
 

@@ -1,5 +1,15 @@
 from dynamicbatch_ragpipeline.env import args
-from dynamicbatch_ragpipeline.doc_layout import step, load_model, predict
+from dynamicbatch_ragpipeline.doc_layout import (
+    load_model as doc_layout_load_model, 
+    predict as doc_layout_predict,
+    step as doc_layout_step,
+)
+from dynamicbatch_ragpipeline.ocr import (
+    load_model as ocr_load_model, 
+    predict as ocr_predict,
+    prefill as ocr_prefill,
+    step as ocr_step,
+)
 from fastapi import FastAPI, Request
 from fastapi import File, Form, UploadFile
 import asyncio
@@ -109,7 +119,7 @@ async def doc_layout(
     with tempfile.NamedTemporaryFile(suffix='.pdf') as temp_file:
         temp_file.write(file)
 
-        r = await predict(
+        r = await doc_layout_predict(
             temp_file, 
             iou_threshold = iou_threshold,
             ratio_x = ratio_x,
@@ -118,22 +128,31 @@ async def doc_layout(
         )
         return r
 
+@app.post('/ocr')
+async def ocr(
+    image: bytes = File(), 
+    stream: bool = Form(False),
+    request: Request = None,
+):
+    pass
+
+
 if args.dynamic_batching:
     @app.on_event("startup")
     async def startup_event():
-        app.state.background_step = asyncio.create_task(step())
+        app.state.background_doc_layout_step = asyncio.create_task(doc_layout_step())
 
     @app.on_event("shutdown")
     async def shutdown_event():
-        app.state.background_step.cancel()
+        app.state.background_doc_layout_step.cancel()
         try:
-            await app.state.background_step
+            await app.state.background_doc_layout_step
         except asyncio.CancelledError:
             pass
 
 if args.hotload:
     logging.info('hotloading the model')
-    load_model()
+    doc_layout_load_model()
 
 if __name__ == "__main__":
     uvicorn.run(
