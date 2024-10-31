@@ -91,7 +91,7 @@ curl -X 'POST' \
 
 Checkout [notebook/document-layout.ipynb](notebook/document-layout.ipynb).
 
-<img src="notebook/doc-layout.png" height="50%">
+<img src="notebook/doc-layout.png" height="10%">
 
 #### Example request OCR
 
@@ -109,13 +109,13 @@ curl -X 'POST' \
 
 Checkout [notebook/ocr.ipynb](notebook/ocr.ipynb).
 
-<img src="notebook/page1.png" height="50%">
+<img src="notebook/page1.png" height="20%">
 
-<img src="notebook/page2.png" height="50%">
+<img src="notebook/page2.png" height="20%">
 
-<img src="notebook/page3.png" height="50%">
+<img src="notebook/page3.png" height="20%">
 
-<img src="notebook/page4.png" height="50%">
+<img src="notebook/page4.png" height="20%">
 
 ## [Stress test](stress-test)
 
