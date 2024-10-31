@@ -1,10 +1,7 @@
 from locust import HttpUser, task
 from locust import events
 import itertools
-import gpustat
 import time
-
-gpu_stats = gpustat.GPUStatCollection.new_query()
 
 """
 Make sure already running this,

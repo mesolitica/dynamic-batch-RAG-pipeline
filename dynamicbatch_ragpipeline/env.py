@@ -48,7 +48,7 @@ def parse_arguments():
         help='microsleep to group dynamic batching, 1 / 1e-4 = 10k steps for second (default: %(default)s, env: DYNAMIC_BATCHING_MICROSLEEP)'
     )
     parser.add_argument(
-        '--dynamic-batching-batch-size', type=float,
+        '--dynamic-batching-batch-size', type=int,
         default=int(os.environ.get('DYNAMIC_BATCHING_BATCH_SIZE', '20')),
         help='maximum of batch size during dynamic batching (default: %(default)s, env: DYNAMIC_BATCHING_BATCH_SIZE)'
     )
@@ -69,6 +69,20 @@ def parse_arguments():
         '--hotload', type=lambda x: x.lower() == 'true',
         default=os.environ.get('HOTLOAD', 'true').lower() == 'true',
         help='Enable hot loading (default: %(default)s, env: HOTLOAD)'
+    )
+    parser.add_argument(
+        '--static-cache', type=lambda x: x.lower() == 'true',
+        default=os.environ.get('STATIC_CACHE', 'false').lower() == 'true',
+        help='Preallocate KV Cache for faster inference (default: %(default)s, env: STATIC_CACHE)'
+    )
+    parser.add_argument(
+        '--static-cache-max-length',
+        type=int,
+        default=int(
+            os.environ.get(
+                'STATIC_CACHE_MAX_LENGTH',
+                '8192')),
+        help='Maximum concurrent requests (default: %(default)s, env: STATIC_CACHE_MAX_LENGTH)'
     )
 
     args = parser.parse_args()

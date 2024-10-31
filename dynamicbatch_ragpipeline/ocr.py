@@ -3,7 +3,10 @@ from sse_starlette import ServerSentEvent
 from dynamicbatch_ragpipeline import ocr_utils
 from dynamicbatch_ragpipeline.env import args
 from dynamicbatch_ragpipeline.function import efficient_attention_mask
-from dynamicbatch_ragpipeline.cache import DynamicLengthDecoderCache
+from dynamicbatch_ragpipeline.cache import (
+    DynamicLengthDecoderCache,
+    StaticLengthDecoderCache,
+)
 from datetime import datetime
 from PIL import Image
 from io import BytesIO
@@ -16,6 +19,7 @@ import json
 
 model = None
 tokenizer = None
+static_cache = None
 
 device = 'cpu'
 if args.accelerator_type == 'cuda':
@@ -28,7 +32,7 @@ prefill_queue = asyncio.Queue()
 step_queue = asyncio.Queue()
 
 def load_model():
-    global model, tokenizer
+    global model, tokenizer, static_cache
 
     if args.model_ocr == 'got_ocr2_0':
         tokenizer = AutoTokenizer.from_pretrained('ucaslcl/GOT-OCR2_0', trust_remote_code=True)
@@ -39,6 +43,18 @@ def load_model():
             attn_implementation = 'sdpa'
         )
         model = model.eval().to(device)
+
+        if args.static_cache:
+            logging.info('initiate static cache')
+            static_cache = StaticLengthDecoderCache(
+                batch_size = args.dynamic_batching_batch_size, 
+                max_length = args.static_cache_max_length,
+                device = device,
+                head_size = model.config.num_attention_heads,
+                dim_size = model.config.hidden_size // model.config.num_attention_heads,
+                num_hidden_layers = model.config.num_hidden_layers,
+                dtype = model.dtype,
+            )
 
 async def prefill():
     need_sleep = True
@@ -155,22 +171,28 @@ async def step():
             kv_len = [caches[i][0][0].shape[2] for i in range(len(batch))]
             max_len = max(kv_len)
             max_len_lengths = max(lengths)
-
-            cache = DynamicLengthDecoderCache(lengths=lengths)
-
             len_cache = len(caches[0])
             len_kv = len(caches[0][0])
+            
+            if args.static_cache:
+                cache = static_cache
+                cache.lengths = lengths
+                for n in range(len_cache):
+                    for i in range(len(batch)):
+                        cache.key_cache[n][i,:, :lengths[i] - 1] = caches[i][n][0][0]
+                        cache.value_cache[n][i,:, :lengths[i] - 1] = caches[i][n][1][0]
 
-            for n in range(len_cache):
+            else:
+                cache = DynamicLengthDecoderCache(lengths=lengths)
+                for n in range(len_cache):
+                    key_cache = []
+                    value_cache = []
+                    for i in range(len(batch)):
+                        key_cache.append(caches[i][n][0])
+                        value_cache.append(caches[i][n][1])
 
-                key_cache = []
-                value_cache = []
-                for i in range(len(batch)):
-                    key_cache.append(caches[i][n][0])
-                    value_cache.append(caches[i][n][1])
-
-                cache.key_cache.append(key_cache)
-                cache.value_cache.append(value_cache)
+                    cache.key_cache.append(key_cache)
+                    cache.value_cache.append(value_cache)
             
             inputs = torch.concat(inputs, dim=0)
             attention_mask = efficient_attention_mask(
@@ -200,17 +222,21 @@ async def step():
                 for k in range(len(cache)):
                     keys = cache.key_cache[k]
                     values = cache.value_cache[k]
-                    v = [keys[i], values[i]]
+                    if args.static_cache:
+                        v = [keys[i][:, :lengths[i]], values[i][:, :lengths[i]]]
+                    else:
+                        v = [keys[i], values[i]]
                     new_cache.append(v)
                 caches.append(new_cache)
 
             for i in range(len(futures)):
                 futures[i].set_result((out_logits[i, -1:], caches[i]))
 
-            for k in range(len(cache)):
-                temp = list(cache[k])
-                for j in range(len(temp)):
-                    del temp[0]
+            if not args.static_cache:
+                for k in range(len(cache)):
+                    temp = list(cache[k])
+                    for j in range(len(temp)):
+                        del temp[0]
         
         except Exception as e:
             logging.error(f'error in step {e}')
@@ -245,7 +271,8 @@ async def streaming(image, max_tokens, request):
                 
                 logits = out[0]
                 cache = out[1]
-                request.scope['cache'] = cache
+                if not args.static_cache:
+                    request.scope['cache'] = cache
                 
                 if length is None:
                     length = cache[0][0].shape[2]

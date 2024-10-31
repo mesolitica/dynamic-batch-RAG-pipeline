@@ -10,7 +10,7 @@ CUDA_VISIBLE_DEVICES=0 \
 python3.10 -m dynamicbatch_ragpipeline.main \
 --host 0.0.0.0 --port 7088 \
 --dynamic-batching true \
---dynamic-batching-batch-size 64
+--dynamic-batching-batch-size 32
 """
 
 class HelloWorldUser(HttpUser):
@@ -21,6 +21,6 @@ class HelloWorldUser(HttpUser):
     def hello_world(self):
 
         files = {
-            'file': ('2310.01889v4.pdf', open('2310.01889v4.pdf', 'rb'), 'application/pdf'),
+            'image': ('table1.png', open('table1.png', 'rb'), 'image/png'),
         }
-        r = self.client.post('/doc_layout', files=files)
+        r = self.client.post('/ocr', files=files)
