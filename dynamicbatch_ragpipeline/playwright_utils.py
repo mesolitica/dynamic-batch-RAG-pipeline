@@ -78,7 +78,11 @@ async def to_pdf(url, viewport_weight, viewport_height):
         pdf = await playwrights[index]['page'].pdf()
         playwrights[index]['available'] = True
         return BytesIO(pdf)
-        
+
+    except asyncio.CancelledError as e:
+        await dead(index)
+        playwrights[index]['available'] = True
+
     except Exception as e:
         await dead(index)
         playwrights[index]['available'] = True

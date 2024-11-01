@@ -24,9 +24,19 @@ def parse_arguments():
         help='Enable hot loading (default: %(default)s, env: RELOAD)'
     )
     parser.add_argument(
+        '--enable-doc-layout', type=lambda x: x.lower() == 'true',
+        default=os.environ.get('ENABLE_DOC_LAYOUT', 'true').lower() == 'true',
+        help='Enable document layout detection (default: %(default)s, env: ENABLE_DOC_LAYOUT)'
+    )
+    parser.add_argument(
         '--model-doc-layout',
         default=os.environ.get('MODEL_DOC_LAYOUT', 'yolo10'),
         help='Model type (default: %(default)s, env: MODEL_DOC_LAYOUT)'
+    )
+    parser.add_argument(
+        '--enable-ocr', type=lambda x: x.lower() == 'true',
+        default=os.environ.get('ENABLE_OCR', 'true').lower() == 'true',
+        help='Enable OCR (default: %(default)s, env: ENABLE_OCR)'
     )
     parser.add_argument(
         '--model-ocr',

@@ -139,48 +139,6 @@ class URL(BaseModel):
 async def hello_world():
     return {'hello': 'world'}
 
-@app.post('/doc_layout')
-async def doc_layout(
-    file: bytes = File(), 
-    iou_threshold: float = Form(0.45),
-    ratio_x: float = Form(2.0),
-    ratio_y: float = Form(2.0),
-    request: Request = None,
-):
-    """
-    Support pdf file, one file multiple pages. Will return list of images in base64 with list of layouts.
-    """
-
-    with tempfile.NamedTemporaryFile(suffix='.pdf') as temp_file:
-        temp_file.write(file)
-
-        r = await doc_layout_predict(
-            temp_file, 
-            iou_threshold = iou_threshold,
-            ratio_x = ratio_x,
-            ratio_y = ratio_y,
-            request = request
-        )
-        return r
-
-@app.post('/ocr')
-async def ocr(
-    image: bytes = File(),
-    mode: str = Form('format'),
-    max_tokens: int = Form(4096),
-    stream: bool = Form(False),
-    request: Request = None,
-):
-    """
-    Convert image to text using OCR.
-    """
-    generator = ocr_predict(image, max_tokens = max_tokens, stream = stream, request = request)
-    r = await generator
-    if stream:
-        return EventSourceResponse(r, headers=HEADERS)
-    else:
-        return r
-
 if args.dynamic_batching:
     @app.on_event("startup")
     async def startup_event():
@@ -200,12 +158,94 @@ if args.dynamic_batching:
         except asyncio.CancelledError:
             pass
 
-if args.hotload:
-    logging.info('hotloading the model')
-    doc_layout_load_model()
-    ocr_load_model()
+if args.enable_doc_layout:
+    logging.info('enabling document layout')
+
+    @app.post('/doc_layout')
+    async def doc_layout(
+        file: bytes = File(), 
+        iou_threshold: float = Form(0.45),
+        ratio_x: float = Form(2.0),
+        ratio_y: float = Form(2.0),
+        request: Request = None,
+    ):
+        """
+        Support pdf file, one file multiple pages. Will return list of images in base64 with list of layouts.
+        """
+
+        with tempfile.NamedTemporaryFile(suffix='.pdf') as temp_file:
+            temp_file.write(file)
+
+            r = await doc_layout_predict(
+                temp_file, 
+                iou_threshold = iou_threshold,
+                ratio_x = ratio_x,
+                ratio_y = ratio_y,
+                request = request
+            )
+            return r
+
+    if args.dynamic_batching:
+
+        @app.on_event("startup")
+        async def startup_event():
+            app.state.background_doc_layout_step = asyncio.create_task(doc_layout_step())
+
+        @app.on_event("shutdown")
+        async def shutdown_event():
+            app.state.background_doc_layout_step.cancel()
+            try:
+                await app.state.background_doc_layout_step
+            except asyncio.CancelledError:
+                pass
+    
+    if args.hotload:
+        logging.info('hotloading document layout model')
+        doc_layout_load_model()
+
+if args.enable_ocr:
+    logging.info('enabling OCR')
+
+    @app.post('/ocr')
+    async def ocr(
+        image: bytes = File(),
+        mode: str = Form('format'),
+        max_tokens: int = Form(4096),
+        stream: bool = Form(False),
+        request: Request = None,
+    ):
+        """
+        Convert image to text using OCR.
+        """
+        generator = ocr_predict(image, max_tokens = max_tokens, stream = stream, request = request)
+        r = await generator
+        if stream:
+            return EventSourceResponse(r, headers=HEADERS)
+        else:
+            return r
+    
+    @app.on_event("startup")
+    async def startup_event():
+        app.state.background_ocr_prefill = asyncio.create_task(ocr_prefill())
+        app.state.background_ocr_step = asyncio.create_task(ocr_step())
+
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        app.state.background_ocr_prefill.cancel()
+        app.state.background_ocr_step.cancel()
+        try:
+            await app.state.background_ocr_prefill
+            await app.state.background_ocr_step
+        except asyncio.CancelledError:
+            pass
+    
+    if args.hotload:
+        logging.info('hotloading OCR model')
+        ocr_load_model()
 
 if args.enable_url_to_pdf:
+    logging.info('enabling URL to PDF')
+
     @app.post('/url_to_pdf')
     async def url_to_pdf(url: URL):
         pdf_file = await to_pdf(**url.dict())
@@ -217,7 +257,6 @@ if args.enable_url_to_pdf:
     
     @app.on_event('startup')
     async def warmup():
-
         tasks = []
         for index in range(args.playwright_max_concurrency):
             task = asyncio.create_task(initialize_browser(index=index))
