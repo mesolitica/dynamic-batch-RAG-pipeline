@@ -25,16 +25,12 @@ def parse_arguments():
     )
     parser.add_argument(
         '--model-doc-layout',
-        default=os.environ.get(
-            'MODEL_DOC_LAYOUT',
-            'yolo10'),
+        default=os.environ.get('MODEL_DOC_LAYOUT', 'yolo10'),
         help='Model type (default: %(default)s, env: MODEL_DOC_LAYOUT)'
     )
     parser.add_argument(
         '--model-ocr',
-        default=os.environ.get(
-            'MODEL_OCR',
-            'got_ocr2_0'),
+        default=os.environ.get('MODEL_OCR', 'got_ocr2_0'),
         help='Model type (default: %(default)s, env: MODEL_OCR)'
     )
     parser.add_argument(
@@ -59,10 +55,7 @@ def parse_arguments():
     parser.add_argument(
         '--max-concurrent',
         type=int,
-        default=int(
-            os.environ.get(
-                'MAX_CONCURRENT',
-                '100')),
+        default=int(os.environ.get('MAX_CONCURRENT', '100')),
         help='Maximum concurrent requests (default: %(default)s, env: MAX_CONCURRENT)'
     )
     parser.add_argument(
@@ -78,11 +71,18 @@ def parse_arguments():
     parser.add_argument(
         '--static-cache-max-length',
         type=int,
-        default=int(
-            os.environ.get(
-                'STATIC_CACHE_MAX_LENGTH',
-                '8192')),
+        default=int(os.environ.get('STATIC_CACHE_MAX_LENGTH', '8192')),
         help='Maximum concurrent requests (default: %(default)s, env: STATIC_CACHE_MAX_LENGTH)'
+    )
+    parser.add_argument(
+        '--enable-url-to-pdf', type=lambda x: x.lower() == 'true',
+        default=os.environ.get('ENABLE_URL_TO_PDF', 'true').lower() == 'true',
+        help='Enable URL to PDF using Playwright (default: %(default)s, env: ENABLE_URL_TO_PDF)'
+    )
+    parser.add_argument(
+        '--playwright-max-concurrency', type=int,
+        default=int(os.environ.get('PLAYWRIGHT_MAX_CONCURRENCY', '1')),
+        help='Enable URL to PDF using Playwright (default: %(default)s, env: PLAYWRIGHT_MAX_CONCURRENCY)'
     )
 
     args = parser.parse_args()

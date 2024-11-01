@@ -8,3 +8,4 @@ python-multipart
 pymupdf
 verovio
 sse_starlette
+playwright

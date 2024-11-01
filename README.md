@@ -6,6 +6,7 @@ Dynamic batching for Document Layout and OCR, suitable for RAG.
 2. Continuous batching for Causal based OCR models.
 3. Can serve user defined max concurrency.
 4. Disconnected signal, so this is to ensure early stop for continuous batching.
+5. Extra tool, convert any URL to PDF file.
 
 **Yeah I know, repository name kinda sucks**.
 
@@ -43,9 +44,12 @@ python3 -m dynamicbatch_ragpipeline.main --help
 
 ```text
 usage: main.py [-h] [--host HOST] [--port PORT] [--loglevel LOGLEVEL] [--reload RELOAD] [--model-doc-layout MODEL_DOC_LAYOUT]
+               [--model-ocr MODEL_OCR] [--dynamic-batching DYNAMIC_BATCHING]
                [--dynamic-batching-microsleep DYNAMIC_BATCHING_MICROSLEEP]
                [--dynamic-batching-batch-size DYNAMIC_BATCHING_BATCH_SIZE] [--accelerator-type ACCELERATOR_TYPE]
-               [--max-concurrent MAX_CONCURRENT] [--hotload HOTLOAD]
+               [--max-concurrent MAX_CONCURRENT] [--hotload HOTLOAD] [--static-cache STATIC_CACHE]
+               [--static-cache-max-length STATIC_CACHE_MAX_LENGTH] [--enable-url-to-pdf ENABLE_URL_TO_PDF]
+               [--playwright-max-concurrency PLAYWRIGHT_MAX_CONCURRENCY]
 
 Configuration parser
 
@@ -57,6 +61,10 @@ options:
   --reload RELOAD       Enable hot loading (default: False, env: RELOAD)
   --model-doc-layout MODEL_DOC_LAYOUT
                         Model type (default: yolo10, env: MODEL_DOC_LAYOUT)
+  --model-ocr MODEL_OCR
+                        Model type (default: got_ocr2_0, env: MODEL_OCR)
+  --dynamic-batching DYNAMIC_BATCHING
+                        Enable dynamic batching (default: True, env: DYNAMIC_BATCHING)
   --dynamic-batching-microsleep DYNAMIC_BATCHING_MICROSLEEP
                         microsleep to group dynamic batching, 1 / 1e-4 = 10k steps for second (default: 0.0001, env:
                         DYNAMIC_BATCHING_MICROSLEEP)
@@ -67,6 +75,14 @@ options:
   --max-concurrent MAX_CONCURRENT
                         Maximum concurrent requests (default: 100, env: MAX_CONCURRENT)
   --hotload HOTLOAD     Enable hot loading (default: True, env: HOTLOAD)
+  --static-cache STATIC_CACHE
+                        Preallocate KV Cache for faster inference (default: False, env: STATIC_CACHE)
+  --static-cache-max-length STATIC_CACHE_MAX_LENGTH
+                        Maximum concurrent requests (default: 8192, env: STATIC_CACHE_MAX_LENGTH)
+  --enable-url-to-pdf ENABLE_URL_TO_PDF
+                        Enable URL to PDF using Playwright (default: True, env: ENABLE_URL_TO_PDF)
+  --playwright-max-concurrency PLAYWRIGHT_MAX_CONCURRENCY
+                        Enable URL to PDF using Playwright (default: 1, env: PLAYWRIGHT_MAX_CONCURRENCY)
 ```
 
 **We support both args and OS environment**.
@@ -78,7 +94,7 @@ python3 -m dynamicbatch_ragpipeline.main \
 --host 0.0.0.0 --port 7088
 ```
 
-#### Example request document layout
+#### Example document layout
 
 ```bash
 curl -X 'POST' \
@@ -93,7 +109,7 @@ Checkout [notebook/document-layout.ipynb](notebook/document-layout.ipynb).
 
 <img src="notebook/doc-layout.png" height="10%">
 
-#### Example request OCR
+#### Example OCR
 
 ```bash
 curl -X 'POST' \
@@ -116,6 +132,24 @@ Checkout [notebook/ocr.ipynb](notebook/ocr.ipynb).
 <img src="notebook/page3.png" height="20%">
 
 <img src="notebook/page4.png" height="20%">
+
+#### Example URL to PDF
+
+```bash
+curl -X 'POST' \
+  'http://localhost:7088/url_to_pdf' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "url": "https://huggingface.co/",
+  "viewport_weight": 1470,
+  "viewport_height": 956
+}'
+```
+
+Checkout [notebook/url-to-pdf.ipynb](notebook/url-to-pdf.ipynb).
+
+**To support more concurrency for URL to PDF, make sure set `--playwright-max-concurrency` more than 1**.
 
 ## [Stress test](stress-test)
 

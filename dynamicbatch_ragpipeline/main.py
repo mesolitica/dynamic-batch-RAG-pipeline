@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi import File, Form, UploadFile
+from fastapi.responses import StreamingResponse
 from sse_starlette import EventSourceResponse
 from dynamicbatch_ragpipeline.env import args
 from dynamicbatch_ragpipeline.doc_layout import (
@@ -14,6 +15,11 @@ from dynamicbatch_ragpipeline.ocr import (
     step as ocr_step,
 )
 from dynamicbatch_ragpipeline.function import cleanup_cache
+from dynamicbatch_ragpipeline.playwright_utils import (
+    to_pdf,
+    initialize_browser,
+)
+from pydantic import BaseModel
 import asyncio
 import logging
 import uvicorn
@@ -124,6 +130,11 @@ app = FastAPI()
 
 app.add_middleware(InsertMiddleware, max_concurrent=args.max_concurrent)
 
+class URL(BaseModel):
+    url: str = 'https://screenresolutiontest.com/screenresolution/'
+    viewport_weight: int = 1470
+    viewport_height: int = 956
+
 @app.get('/')
 async def hello_world():
     return {'hello': 'world'}
@@ -137,7 +148,7 @@ async def doc_layout(
     request: Request = None,
 ):
     """
-    Support pdf file, one file multiple pages.
+    Support pdf file, one file multiple pages. Will return list of images in base64 with list of layouts.
     """
 
     with tempfile.NamedTemporaryFile(suffix='.pdf') as temp_file:
@@ -154,18 +165,21 @@ async def doc_layout(
 
 @app.post('/ocr')
 async def ocr(
-    image: bytes = File(), 
+    image: bytes = File(),
+    mode: str = Form('format'),
     max_tokens: int = Form(4096),
     stream: bool = Form(False),
     request: Request = None,
 ):
+    """
+    Convert image to text using OCR.
+    """
     generator = ocr_predict(image, max_tokens = max_tokens, stream = stream, request = request)
     r = await generator
     if stream:
         return EventSourceResponse(r, headers=HEADERS)
     else:
         return r
-
 
 if args.dynamic_batching:
     @app.on_event("startup")
@@ -190,6 +204,26 @@ if args.hotload:
     logging.info('hotloading the model')
     doc_layout_load_model()
     ocr_load_model()
+
+if args.enable_url_to_pdf:
+    @app.post('/url_to_pdf')
+    async def url_to_pdf(url: URL):
+        pdf_file = await to_pdf(**url.dict())
+        return StreamingResponse(
+            pdf_file,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=mydocument.pdf"}
+        )
+    
+    @app.on_event('startup')
+    async def warmup():
+
+        tasks = []
+        for index in range(args.playwright_max_concurrency):
+            task = asyncio.create_task(initialize_browser(index=index))
+            tasks.append(task)
+
+        await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
     uvicorn.run(
