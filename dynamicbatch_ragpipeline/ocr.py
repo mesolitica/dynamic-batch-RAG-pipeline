@@ -81,13 +81,21 @@ async def prefill():
 
             futures = [batch[i][0] for i in range(len(batch))]
             input_img = [batch[i][1] for i in range(len(batch))]
+            modes = [batch[i][4] for i in range(len(batch))]
 
-            qs = ocr_utils.qs + 'OCR with format: '
-            conv = ocr_utils.conv_mpt.copy()
-            conv.append_message(conv.roles[0], qs)
-            conv.append_message(conv.roles[1], None)
-            prompt = conv.get_prompt()
-            inputs = tokenizer([prompt], return_tensors = 'pt')
+            prompts = []
+            for f in modes:
+                if f == 'format':
+                    qs = 'OCR with format: '
+                else:
+                    qs = 'OCR: '
+
+                qs = ocr_utils.qs + qs
+                conv = ocr_utils.conv_mpt.copy()
+                conv.append_message(conv.roles[0], qs)
+                conv.append_message(conv.roles[1], None)
+                prompt = conv.get_prompt()
+                prompts.append(prompt)
 
             images = []
             for i in range(len(input_img)):
@@ -95,11 +103,14 @@ async def prefill():
                 image_tensor = ocr_utils.image_processor_high(image).unsqueeze(0).type(model.dtype).to(device)
                 images.append(image_tensor)
             
-            input_ids = inputs['input_ids'].to(device)
-            input_ids = input_ids.repeat(len(images), 1)
+            input_ids = tokenizer(prompts, return_tensors = 'pt', padding = 'longest')
+            input_ids.pop('token_type_ids', None)
+            lengths = input_ids['attention_mask'].sum(axis = 1)
+            for k in input_ids.keys():
+                input_ids[k] = input_ids[k].to(device)
 
             out = model(
-                input_ids = input_ids, 
+                **input_ids,
                 images = images,
                 past_key_values = None,
                 use_cache = True,
@@ -113,8 +124,8 @@ async def prefill():
                 cache = []
                 for k in range(len(out_caches)):
                     cache_ = [
-                        out_caches[k][0][i:i + 1],
-                        out_caches[k][1][i:i + 1],
+                        out_caches[k][0][i:i + 1, :, :lengths[i]],
+                        out_caches[k][1][i:i + 1, :, :lengths[i]],
                     ]
                     cache.append(cache_)
                 caches.append(cache)
@@ -248,7 +259,7 @@ async def step():
             except:
                 pass
 
-async def streaming(image, max_tokens, request):
+async def streaming(image, mode, max_tokens, request):
 
     cache = None
     length = None
@@ -266,7 +277,7 @@ async def streaming(image, max_tokens, request):
                     l = length + k
 
                 future = asyncio.Future()
-                await q.put((future, inputs, cache, l))
+                await q.put((future, inputs, cache, l, mode))
                 out = await future
                 
                 logits = out[0]
@@ -306,11 +317,11 @@ async def streaming(image, max_tokens, request):
             logging.error(f"model step exception {e} {request.scope['request']['uuid']}")
             yield ServerSentEvent(**{"data": str(e)})
 
-async def predict(image, max_tokens = 4096, stream = False, request = None):
+async def predict(image, mode = 'format', max_tokens = 4096, stream = False, request = None):
     if model is None:
         load_model()
 
-    func = streaming(image=image, max_tokens=max_tokens, request=request)
+    func = streaming(image=image, mode=mode, max_tokens=max_tokens, request=request)
     if stream:
         return func
     else:

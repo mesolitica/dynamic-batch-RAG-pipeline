@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi import File, Form, UploadFile
+from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from sse_starlette import EventSourceResponse
 from dynamicbatch_ragpipeline.env import args
@@ -130,11 +131,6 @@ app = FastAPI()
 
 app.add_middleware(InsertMiddleware, max_concurrent=args.max_concurrent)
 
-class URL(BaseModel):
-    url: str = 'https://screenresolutiontest.com/screenresolution/'
-    viewport_weight: int = 1470
-    viewport_height: int = 956
-
 @app.get('/')
 async def hello_world():
     return {'hello': 'world'}
@@ -216,8 +212,19 @@ if args.enable_ocr:
     ):
         """
         Convert image to text using OCR.
+
+        Support 2 modes,
+
+        1. `plain`, plain text.
+
+        2. `format`, will format into latex.
+
         """
-        generator = ocr_predict(image, max_tokens = max_tokens, stream = stream, request = request)
+        mode = mode.lower()
+        if mode not in {'plain', 'format'}:
+            raise HTTPException(status_code=400, detail='mode only support `plain` or `format`.')
+
+        generator = ocr_predict(image, mode = mode, max_tokens = max_tokens, stream = stream, request = request)
         r = await generator
         if stream:
             return EventSourceResponse(r, headers=HEADERS)
@@ -245,6 +252,11 @@ if args.enable_ocr:
 
 if args.enable_url_to_pdf:
     logging.info('enabling URL to PDF')
+
+    class URL(BaseModel):
+        url: str = 'https://screenresolutiontest.com/screenresolution/'
+        viewport_weight: int = 1470
+        viewport_height: int = 956
 
     @app.post('/url_to_pdf')
     async def url_to_pdf(url: URL):
