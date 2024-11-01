@@ -149,6 +149,8 @@ curl -X 'POST' \
 
 Checkout [notebook/url-to-pdf.ipynb](notebook/url-to-pdf.ipynb).
 
+<img src="notebook/url-to-pdf.png" width="50%">
+
 **To support more concurrency for URL to PDF, make sure set `--playwright-max-concurrency` more than 1**.
 
 ## [Stress test](stress-test)
