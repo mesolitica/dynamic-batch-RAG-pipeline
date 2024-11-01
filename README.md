@@ -43,9 +43,9 @@ python3 -m dynamicbatch_ragpipeline.main --help
 ```
 
 ```text
-usage: main.py [-h] [--host HOST] [--port PORT] [--loglevel LOGLEVEL] [--reload RELOAD] [--model-doc-layout MODEL_DOC_LAYOUT]
-               [--model-ocr MODEL_OCR] [--dynamic-batching DYNAMIC_BATCHING]
-               [--dynamic-batching-microsleep DYNAMIC_BATCHING_MICROSLEEP]
+usage: main.py [-h] [--host HOST] [--port PORT] [--loglevel LOGLEVEL] [--reload RELOAD] [--enable-doc-layout ENABLE_DOC_LAYOUT]
+               [--model-doc-layout MODEL_DOC_LAYOUT] [--enable-ocr ENABLE_OCR] [--model-ocr MODEL_OCR]
+               [--dynamic-batching DYNAMIC_BATCHING] [--dynamic-batching-microsleep DYNAMIC_BATCHING_MICROSLEEP]
                [--dynamic-batching-batch-size DYNAMIC_BATCHING_BATCH_SIZE] [--accelerator-type ACCELERATOR_TYPE]
                [--max-concurrent MAX_CONCURRENT] [--hotload HOTLOAD] [--static-cache STATIC_CACHE]
                [--static-cache-max-length STATIC_CACHE_MAX_LENGTH] [--enable-url-to-pdf ENABLE_URL_TO_PDF]
@@ -59,8 +59,12 @@ options:
   --port PORT           port to host the app (default: 7088, env: PORT)
   --loglevel LOGLEVEL   Logging level (default: INFO, env: LOGLEVEL)
   --reload RELOAD       Enable hot loading (default: False, env: RELOAD)
+  --enable-doc-layout ENABLE_DOC_LAYOUT
+                        Enable document layout detection (default: True, env: ENABLE_DOC_LAYOUT)
   --model-doc-layout MODEL_DOC_LAYOUT
                         Model type (default: yolo10, env: MODEL_DOC_LAYOUT)
+  --enable-ocr ENABLE_OCR
+                        Enable OCR (default: True, env: ENABLE_OCR)
   --model-ocr MODEL_OCR
                         Model type (default: got_ocr2_0, env: MODEL_OCR)
   --dynamic-batching DYNAMIC_BATCHING
