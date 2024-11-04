@@ -10,3 +10,4 @@ verovio
 sse_starlette
 playwright
 transformers
+tiktoken
