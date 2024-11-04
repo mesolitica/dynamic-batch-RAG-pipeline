@@ -11,3 +11,11 @@ WORKDIR /home/ubuntu
 
 RUN pip3 install pip -U
 RUN sudo apt update
+
+ADD requirements.txt .
+RUN pip3 install -r requirements.txt
+
+RUN ~/.local/bin/playwright install-deps
+RUN ~/.local/bin/playwright install
+
+COPY ./dynamicbatch_ragpipeline/ /home/ubuntu/dynamicbatch_ragpipeline

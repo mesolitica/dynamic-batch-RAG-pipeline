@@ -1,0 +1,26 @@
+version: "3.3"
+
+services:
+  dynamicbatch_ragpipeline:
+    build:
+      context: .
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    container_name: dynamicbatch_ragpipeline
+    environment:
+      - PYTHONUNBUFFERED=1
+      - HF_HUB_ENABLE_HF_TRANSFER=1
+      - ENABLE_DOC_LAYOUT=false
+      - ENABLE_OCR=false
+      
+    volumes:
+      - "./dynamicbatch_ragpipeline:/home/ubuntu/dynamicbatch_ragpipeline"
+      - "~/.cache/huggingface:/home/ubuntu/.cache/huggingface"
+    ports:
+      - "7088:7088"
+    command: python3 -m dynamicbatch_ragpipeline.main --host 0.0.0.0 --port 7088 --reload true

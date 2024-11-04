@@ -9,3 +9,4 @@ pymupdf
 verovio
 sse_starlette
 playwright
+transformers
