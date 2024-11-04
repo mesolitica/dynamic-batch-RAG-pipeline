@@ -336,7 +336,3 @@ async def predict(image, mode = 'format', max_tokens = 4096, stream = False, req
             'result': ''.join(tokens)
         }
 
-
-    
-
-    
