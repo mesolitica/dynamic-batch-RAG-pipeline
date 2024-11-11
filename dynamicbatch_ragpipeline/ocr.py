@@ -135,8 +135,8 @@ async def prefill():
                 key_cache = {}
                 value_cache = {}
                 for i in range(len(batch)):
-                    key_cache[uuids[i]] = out_caches[k][0][i: i + 1]
-                    value_cache[uuids[i]] = out_caches[k][1][i: i + 1]
+                    key_cache[uuids[i]] = out_caches[k][0][i: i + 1, :, :lengths[i]]
+                    value_cache[uuids[i]] = out_caches[k][1][i: i + 1, :, :lengths[i]]
                 
                 if cache_exists:
                     global_cache.key_cache[k].update(key_cache)
