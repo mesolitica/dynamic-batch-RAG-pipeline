@@ -6,11 +6,11 @@ import time
 """
 Make sure already running this,
 
-CUDA_VISIBLE_DEVICES=0 \
+CUDA_VISIBLE_DEVICES=2 \
 python3.10 -m dynamicbatch_ragpipeline.main \
 --host 0.0.0.0 --port 7088 \
 --dynamic-batching true \
---dynamic-batching-batch-size 32
+--dynamic-batching-ocr-batch-size 5
 """
 
 class HelloWorldUser(HttpUser):

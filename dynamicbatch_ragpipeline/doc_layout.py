@@ -55,9 +55,9 @@ async def step():
             batch = []
             while not step_queue.empty():
                 try:
-                    request = await asyncio.wait_for(step_queue.get(), timeout=1e-6)
+                    request = await asyncio.wait_for(step_queue.get(), timeout=1e-9)
                     batch.append(request)
-                    if len(batch) >= args.dynamic_batching_batch_size:
+                    if len(batch) >= args.dynamic_batching_doc_layout_batch_size:
                         need_sleep = False
                         break
                     else:

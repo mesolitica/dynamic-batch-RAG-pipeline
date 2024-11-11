@@ -8,8 +8,6 @@ Dynamic batching for Document Layout and OCR, suitable for RAG.
 4. Disconnected signal, so this is to ensure early stop for continuous batching.
 5. Extra tool, convert any URL to PDF file.
 
-**Yeah I know, repository name kinda sucks**.
-
 ## Available models
 
 ### Document Layout

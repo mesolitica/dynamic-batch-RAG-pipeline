@@ -54,9 +54,14 @@ def parse_arguments():
         help='microsleep to group dynamic batching, 1 / 1e-4 = 10k steps for second (default: %(default)s, env: DYNAMIC_BATCHING_MICROSLEEP)'
     )
     parser.add_argument(
-        '--dynamic-batching-batch-size', type=int,
-        default=int(os.environ.get('DYNAMIC_BATCHING_BATCH_SIZE', '20')),
-        help='maximum of batch size during dynamic batching (default: %(default)s, env: DYNAMIC_BATCHING_BATCH_SIZE)'
+        '--dynamic-batching-doc-layout-batch-size', type=int,
+        default=int(os.environ.get('DYNAMIC_BATCHING_DOC_LAYOUT_BATCH_SIZE', '16')),
+        help='maximum of batch size for document layout during dynamic batching (default: %(default)s, env: DYNAMIC_BATCHING_DOC_LAYOUT_BATCH_SIZE)'
+    )
+    parser.add_argument(
+        '--dynamic-batching-ocr-batch-size', type=int,
+        default=int(os.environ.get('DYNAMIC_BATCHING_OCR_BATCH_SIZE', '16')),
+        help='maximum of batch size for OCR during dynamic batching (default: %(default)s, env: DYNAMIC_BATCHING_OCR_BATCH_SIZE)'
     )
     parser.add_argument(
         '--accelerator-type', default=os.environ.get('ACCELERATOR_TYPE', 'cuda'),

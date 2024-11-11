@@ -94,11 +94,6 @@ class InsertMiddleware:
             except asyncio.CancelledError:
                 logging.warning(f"Cancelling {scope['request']['uuid']} due to disconnect")
             finally:
-
-                if 'cache' in scope and scope['cache'] is not None:
-                    cleanup_cache(scope['cache'])
-                    scope.pop('cache', None)
-
                 torch.cuda.empty_cache()
     
     async def __call__(self, scope, receive, send):

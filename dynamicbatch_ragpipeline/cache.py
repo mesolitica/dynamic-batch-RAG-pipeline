@@ -2,6 +2,7 @@ from typing import List, Tuple, Optional, Dict, Any
 from transformers.cache_utils import Cache
 import torch
 import torch.nn.functional as F
+import time
 
 def pad_kv(caches):
     """
@@ -23,21 +24,14 @@ def pad_kv(caches):
 
 class DynamicLengthDecoderCache(Cache):
 
-    def __init__(self, lengths) -> None:
+    def __init__(self) -> None:
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
-        self._seen_tokens = max(lengths)
 
-    def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
-        """
-        Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
-        sequence length.
-        """
-        if layer_idx < len(self):
-            return self.key_cache[layer_idx], self.value_cache[layer_idx]
-        else:
-            raise KeyError(
-                f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
+    def batch_size(self):
+        if len(self.key_cache) > 0:
+            return len(self.key_cache[0])
+        return 0
 
     def __len__(self):
         """
@@ -53,24 +47,34 @@ class DynamicLengthDecoderCache(Cache):
         layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        
-        for i in range(len(key_states)):
-            self.key_cache[layer_idx][i] = torch.cat(
-                [self.key_cache[layer_idx][i], key_states[i: i + 1]], dim=-2)
-            self.value_cache[layer_idx][i] = torch.cat(
-                [self.value_cache[layer_idx][i], value_states[i: i + 1]], dim=-2)
 
-        k = pad_kv(self.key_cache[layer_idx])
-        v = pad_kv(self.value_cache[layer_idx])
+        keys, values = [], []
+        if len(self.key_cache[layer_idx]) > 1:
+            print(len(self.key_cache[layer_idx]), key_states.shape)
+        for i, k in enumerate(sorted(self.key_cache[layer_idx].keys())):
+            self.key_cache[layer_idx][k] = torch.cat(
+                [self.key_cache[layer_idx][k], key_states[i: i + 1]], dim=-2)
+            self.value_cache[layer_idx][k] = torch.cat(
+                [self.value_cache[layer_idx][k], value_states[i: i + 1]], dim=-2)
+            keys.append(self.key_cache[layer_idx][k])
+            values.append(self.value_cache[layer_idx][k])
+
+        k = pad_kv(keys)
+        v = pad_kv(values)
+
+        if k.shape[0] > 1:
+            print(k.shape, v.shape)
 
         return k, v
-
+    
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # TODO: deprecate this function in favor of `cache_position`
         if len(self.key_cache) <= layer_idx:
             return 0
-        return self._seen_tokens
+        
+        lengths = [self.key_cache[0][k].shape[2] for k in self.key_cache[0].keys()]
+        return max(lengths)
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
