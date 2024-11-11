@@ -129,7 +129,7 @@ app.add_middleware(InsertMiddleware, max_concurrent=args.max_concurrent)
 @app.get('/')
 async def hello_world():
     return {'hello': 'world'}
-
+            
 if args.enable_doc_layout:
     logging.info('enabling document layout')
 

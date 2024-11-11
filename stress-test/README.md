@@ -22,7 +22,7 @@ locust -f doc_layout_without_dynamic.py -P 7001 -H http://localhost:7088 -r 10 -
 Rate of 5 users per second, total requests up to 50 users for 60 seconds,
 
 ```bash
-locust -f ocr.py -P 7001 -H http://localhost:7088 -r 1 -u 50 -t 60
+locust -f ocr.py -P 7001 -H http://localhost:7088 -r 5 -u 50 -t 60
 ```
 
 ### Continuous batching

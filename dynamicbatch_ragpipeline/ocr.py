@@ -68,6 +68,7 @@ async def prefill():
             await asyncio.sleep(args.dynamic_batching_microsleep)
         
         try:
+            need_sleep = True
             batch = []
             while not prefill_queue.empty():
                 try:
@@ -76,8 +77,7 @@ async def prefill():
                     if len(batch) >= args.dynamic_batching_ocr_batch_size:
                         need_sleep = False
                         break
-                    else:
-                        need_sleep = True
+
                 except asyncio.TimeoutError:
                     break
 
@@ -89,7 +89,7 @@ async def prefill():
             modes = [batch[i][3] for i in range(len(batch))]
             uuids = [batch[i][4] for i in range(len(batch))]
 
-            logging.info(f'{str(datetime.now())} OCR prefill batch size of {len(uuids)}')
+            logging.debug(f'{str(datetime.now())} OCR prefill batch size of {len(uuids)}')
 
             prompts = []
             for f in modes:
@@ -127,7 +127,6 @@ async def prefill():
                 )
                 out_logits = out[0]
                 out_caches = out[1]
-                print(out_logits.shape)
 
             cache_exists = len(global_cache.key_cache)
             
@@ -171,17 +170,19 @@ async def step():
             await asyncio.sleep(args.dynamic_batching_microsleep)
         
         try:
+            need_sleep = True
+
             batch = []
+            batch_start_time = time.time()
             while not step_queue.empty():
                 try:
-                    print('isinde loop')
                     request = await asyncio.wait_for(step_queue.get(), timeout=1e-6)
                     batch.append(request)
+                    
                     if len(batch) >= args.dynamic_batching_ocr_batch_size:
                         need_sleep = False
                         break
-                    else:
-                        need_sleep = True
+
                 except asyncio.TimeoutError:
                     break
 
@@ -193,7 +194,7 @@ async def step():
             lengths = [batch[i][2] for i in range(len(batch))]
             uuids = [batch[i][4] for i in range(len(batch))]
 
-            logging.info(f'{str(datetime.now())} OCR step batch size of {len(uuids)}')
+            logging.debug(f'{str(datetime.now())} OCR step batch size of {len(uuids)}')
 
             global_cache.current_uuid = uuids
 
@@ -224,7 +225,6 @@ async def step():
                 futures[i].set_result((out_logits[i, -1:],))
         
         except Exception as e:
-            print(e)
             logging.error(f'error in step {e}')
             try:
                 futures = [batch[i][0] for i in range(len(batch))]
@@ -254,7 +254,6 @@ async def streaming(image, mode, max_tokens, request):
             future = asyncio.Future()
             await q.put((future, inputs, l, mode, uuid))
             out = await future
-            print('outtt', out)
             
             logits = out[0]
             
@@ -263,7 +262,6 @@ async def streaming(image, mode, max_tokens, request):
 
             idx_next = logits.argmax(-1)
             token = tokenizer.decode(idx_next)
-            print(uuid, k, token)
 
             if k == 0:
                 request.scope['request']['time_first_token'] = time.time()
@@ -292,7 +290,7 @@ async def streaming(image, mode, max_tokens, request):
         yield ServerSentEvent(**{"data": str(e)})
     
     finally:
-        logging.info(f'purging {uuid} KV cache')
+        logging.debug(f'purging {uuid} KV cache')
         for i in range(len(global_cache.key_cache)):
             global_cache.key_cache[i].pop(uuid, None)
             global_cache.value_cache[i].pop(uuid, None)

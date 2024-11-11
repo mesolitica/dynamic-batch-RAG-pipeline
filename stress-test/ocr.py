@@ -10,7 +10,7 @@ CUDA_VISIBLE_DEVICES=2 \
 python3.10 -m dynamicbatch_ragpipeline.main \
 --host 0.0.0.0 --port 7088 \
 --dynamic-batching true \
---dynamic-batching-ocr-batch-size 5
+--dynamic-batching-ocr-batch-size 32
 """
 
 class HelloWorldUser(HttpUser):
