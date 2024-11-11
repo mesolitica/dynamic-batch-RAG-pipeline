@@ -27,6 +27,7 @@ class DynamicLengthDecoderCache(Cache):
     def __init__(self) -> None:
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
+        self.current_uuid = []
 
     def batch_size(self):
         if len(self.key_cache) > 0:
@@ -49,9 +50,7 @@ class DynamicLengthDecoderCache(Cache):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
 
         keys, values = [], []
-        if len(self.key_cache[layer_idx]) > 1:
-            print(len(self.key_cache[layer_idx]), key_states.shape)
-        for i, k in enumerate(sorted(self.key_cache[layer_idx].keys())):
+        for i, k in enumerate(self.current_uuid):
             self.key_cache[layer_idx][k] = torch.cat(
                 [self.key_cache[layer_idx][k], key_states[i: i + 1]], dim=-2)
             self.value_cache[layer_idx][k] = torch.cat(
@@ -61,10 +60,7 @@ class DynamicLengthDecoderCache(Cache):
 
         k = pad_kv(keys)
         v = pad_kv(values)
-
-        if k.shape[0] > 1:
-            print(k.shape, v.shape)
-
+        
         return k, v
     
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
@@ -73,7 +69,7 @@ class DynamicLengthDecoderCache(Cache):
         if len(self.key_cache) <= layer_idx:
             return 0
         
-        lengths = [self.key_cache[0][k].shape[2] for k in self.key_cache[0].keys()]
+        lengths = [self.key_cache[0][k].shape[2] for k in self.current_uuid]
         return max(lengths)
 
     def get_max_length(self) -> Optional[int]:

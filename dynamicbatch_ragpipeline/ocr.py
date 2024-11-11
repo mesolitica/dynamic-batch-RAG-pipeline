@@ -58,6 +58,7 @@ def load_model():
                 dtype = model.dtype,
             )
         else:
+            logging.info('initiate dynamic cache')
             global_cache = DynamicLengthDecoderCache()
 
 async def prefill():
@@ -70,12 +71,13 @@ async def prefill():
             batch = []
             while not prefill_queue.empty():
                 try:
-                    if len(batch) + global_cache.batch_size() >= args.dynamic_batching_ocr_batch_size:
+                    request = await asyncio.wait_for(prefill_queue.get(), timeout=1e-6)
+                    batch.append(request)
+                    if len(batch) >= args.dynamic_batching_ocr_batch_size:
                         need_sleep = False
                         break
-                    request = await asyncio.wait_for(prefill_queue.get(), timeout=1e-9)
-                    batch.append(request)
-                    need_sleep = True
+                    else:
+                        need_sleep = True
                 except asyncio.TimeoutError:
                     break
 
@@ -86,6 +88,8 @@ async def prefill():
             input_img = [batch[i][1] for i in range(len(batch))]
             modes = [batch[i][3] for i in range(len(batch))]
             uuids = [batch[i][4] for i in range(len(batch))]
+
+            logging.info(f'{str(datetime.now())} OCR prefill batch size of {len(uuids)}')
 
             prompts = []
             for f in modes:
@@ -101,19 +105,19 @@ async def prefill():
                 prompt = conv.get_prompt()
                 prompts.append(prompt)
 
-            images = []
-            for i in range(len(input_img)):
-                image = Image.open(BytesIO(input_img[i])).convert('RGB')
-                image_tensor = ocr_utils.image_processor_high(image).unsqueeze(0).type(model.dtype).to(device)
-                images.append(image_tensor)
-            
-            input_ids = tokenizer(prompts, return_tensors = 'pt', padding = 'longest')
-            input_ids.pop('token_type_ids', None)
-            lengths = input_ids['attention_mask'].sum(axis = 1)
-            for k in input_ids.keys():
-                input_ids[k] = input_ids[k].to(device)
-
             with torch.no_grad():
+                images = []
+                for i in range(len(input_img)):
+                    image = Image.open(BytesIO(input_img[i])).convert('RGB')
+                    image_tensor = ocr_utils.image_processor_high(image).unsqueeze(0).type(model.dtype).to(device)
+                    images.append(image_tensor)
+                
+                input_ids = tokenizer(prompts, return_tensors = 'pt', padding = 'longest')
+                input_ids.pop('token_type_ids', None)
+                lengths = input_ids['attention_mask'].sum(axis = 1)
+                for k in input_ids.keys():
+                    input_ids[k] = input_ids[k].to(device)
+                
                 out = model(
                     **input_ids,
                     images = images,
@@ -121,8 +125,9 @@ async def prefill():
                     use_cache = True,
                     return_dict = False,
                 )
-            out_logits = out[0]
-            out_caches = out[1]
+                out_logits = out[0]
+                out_caches = out[1]
+                print(out_logits.shape)
 
             cache_exists = len(global_cache.key_cache)
             
@@ -140,10 +145,10 @@ async def prefill():
                 else:
                     global_cache.key_cache.append(key_cache)
                     global_cache.value_cache.append(value_cache)
-            
+
             for i in range(len(futures)):
                 futures[i].set_result((out_logits[i, -1:],))
-            
+
             for k in range(len(out_caches)):
                 temp = list(out_caches[k])
                 for j in range(len(out_caches[k])):
@@ -169,12 +174,14 @@ async def step():
             batch = []
             while not step_queue.empty():
                 try:
-                    if len(batch) + global_cache.batch_size() >= args.dynamic_batching_ocr_batch_size:
+                    print('isinde loop')
+                    request = await asyncio.wait_for(step_queue.get(), timeout=1e-6)
+                    batch.append(request)
+                    if len(batch) >= args.dynamic_batching_ocr_batch_size:
                         need_sleep = False
                         break
-                    request = await asyncio.wait_for(step_queue.get(), timeout=1e-9)
-                    batch.append(request)
-                    need_sleep = True
+                    else:
+                        need_sleep = True
                 except asyncio.TimeoutError:
                     break
 
@@ -186,9 +193,9 @@ async def step():
             lengths = [batch[i][2] for i in range(len(batch))]
             uuids = [batch[i][4] for i in range(len(batch))]
 
-            sorted_indices = sorted(range(len(uuids)), key=lambda i: uuids[i])
-            inputs = [inputs[i] for i in sorted_indices]
-            lengths = [lengths[i] for i in sorted_indices]
+            logging.info(f'{str(datetime.now())} OCR step batch size of {len(uuids)}')
+
+            global_cache.current_uuid = uuids
 
             max_len_lengths = max(lengths)
             with torch.no_grad():
@@ -217,6 +224,7 @@ async def step():
                 futures[i].set_result((out_logits[i, -1:],))
         
         except Exception as e:
+            print(e)
             logging.error(f'error in step {e}')
             try:
                 futures = [batch[i][0] for i in range(len(batch))]
@@ -233,59 +241,61 @@ async def streaming(image, mode, max_tokens, request):
     inputs = image
     uuid = request.scope['request']['uuid']
 
-    with torch.no_grad():
-        try:
-            for k in range(max_tokens):
+    try:
+        for k in range(max_tokens):
 
-                if k == 0:
-                    q = prefill_queue
-                    l = length
-                else:
-                    q = step_queue
-                    l = length + k
+            if k == 0:
+                q = prefill_queue
+                l = length
+            else:
+                q = step_queue
+                l = length + k
 
-                future = asyncio.Future()
-                await q.put((future, inputs, l, mode, uuid))
-                out = await future
-                
-                logits = out[0]
-                
-                if length is None:
-                    length = global_cache.key_cache[0][uuid].shape[2]
-
-                idx_next = logits.argmax(-1)
-                token = tokenizer.decode(idx_next)
-
-                if k == 0:
-                    request.scope['request']['time_first_token'] = time.time()
-                
-                if token == ocr_utils.stop_str:
-                    break
-
-                del logits
-                inputs = idx_next.unsqueeze(0)
-
-                data = {
-                    'token': token
-                }
-                yield json.dumps(data)
-                await asyncio.sleep(0)
+            future = asyncio.Future()
+            await q.put((future, inputs, l, mode, uuid))
+            out = await future
+            print('outtt', out)
             
-            request.scope['request']['time_max_tokens'] = time.time()
-            request.scope['request']['total_tokens'] = k
+            logits = out[0]
+            
+            if length is None:
+                length = global_cache.key_cache[0][uuid].shape[2]
 
-        except asyncio.CancelledError as e:
-            logging.warning(f"model step cancelled {request.scope['request']['uuid']}")
-            yield ServerSentEvent(**{"data": str(e)})
+            idx_next = logits.argmax(-1)
+            token = tokenizer.decode(idx_next)
+            print(uuid, k, token)
+
+            if k == 0:
+                request.scope['request']['time_first_token'] = time.time()
+            
+            if token == ocr_utils.stop_str:
+                break
+
+            del logits
+            inputs = idx_next.unsqueeze(0)
+
+            data = {
+                'token': token
+            }
+            yield json.dumps(data)
+            await asyncio.sleep(0)
         
-        except Exception as e:
-            logging.error(f"model step exception {e} {request.scope['request']['uuid']}")
-            yield ServerSentEvent(**{"data": str(e)})
-        
-        finally:
-            for i in range(len(global_cache.key_cache)):
-                global_cache.key_cache[i].pop(request.scope['request']['uuid'], None)
-                global_cache.value_cache[i].pop(request.scope['request']['uuid'], None)
+        request.scope['request']['time_max_tokens'] = time.time()
+        request.scope['request']['total_tokens'] = k
+
+    except asyncio.CancelledError as e:
+        logging.warning(f"model step cancelled {uuid}")
+        yield ServerSentEvent(**{"data": str(e)})
+    
+    except Exception as e:
+        logging.error(f"model step exception {e} {uuid}")
+        yield ServerSentEvent(**{"data": str(e)})
+    
+    finally:
+        logging.info(f'purging {uuid} KV cache')
+        for i in range(len(global_cache.key_cache)):
+            global_cache.key_cache[i].pop(uuid, None)
+            global_cache.value_cache[i].pop(uuid, None)
 
 async def predict(image, mode = 'format', max_tokens = 4096, stream = False, request = None):
     if model is None:

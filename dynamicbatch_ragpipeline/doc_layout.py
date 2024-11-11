@@ -55,7 +55,7 @@ async def step():
             batch = []
             while not step_queue.empty():
                 try:
-                    request = await asyncio.wait_for(step_queue.get(), timeout=1e-9)
+                    request = await asyncio.wait_for(step_queue.get(), timeout=1e-6)
                     batch.append(request)
                     if len(batch) >= args.dynamic_batching_doc_layout_batch_size:
                         need_sleep = False
@@ -71,15 +71,16 @@ async def step():
             futures = [batch[i][0] for i in range(len(batch))]
             input_img = [batch[i][1] for i in range(len(batch))]
 
-            logging.info(f'{str(datetime.now())} step batch size of {len(input_img)}')
+            logging.debug(f'{str(datetime.now())} document layout step batch size of {len(input_img)}')
 
-            det_res = model.predict(
-                input_img,
-                imgsz=1024,
-                conf=0.25,
-                device=device,
-                batch=len(input_img)
-            )
+            with torch.no_grad():
+                det_res = model.predict(
+                    input_img,
+                    imgsz=1024,
+                    conf=0.25,
+                    device=device,
+                    batch=len(input_img)
+                )
 
             for i in range(len(futures)):
                 boxes = det_res[i].__dict__['boxes'].xyxy
@@ -128,13 +129,14 @@ async def predict(
         results = await asyncio.gather(*futures)
     else:
         results = []
-        det_res = model.predict(
-                images,
-                imgsz=1024,
-                conf=0.25,
-                device=device,
-                batch=len(images)
-            )
+        with torch.no_grad():
+            det_res = model.predict(
+                    images,
+                    imgsz=1024,
+                    conf=0.25,
+                    device=device,
+                    batch=len(images)
+                )
 
         for i in range(len(det_res)):
             boxes = det_res[i].__dict__['boxes'].xyxy

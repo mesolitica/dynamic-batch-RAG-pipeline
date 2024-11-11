@@ -5,8 +5,8 @@
 Rate of 10 users per second, total requests up to 100 users for 60 seconds,
 
 ```bash
-locust -f t5_continuous.py -P 7001 -H http://localhost:7088 -r 10 -u 100 -t 60
-locust -f doc_layout_without_dynamic -P 7001 -H http://localhost:7088 -r 10 -u 100 -t 60
+locust -f doc_layout_dynamic.py -P 7001 -H http://localhost:7088 -r 10 -u 100 -t 60
+locust -f doc_layout_without_dynamic.py -P 7001 -H http://localhost:7088 -r 10 -u 100 -t 60
 ```
 
 ### Non-dynamic batching
@@ -22,7 +22,7 @@ locust -f doc_layout_without_dynamic -P 7001 -H http://localhost:7088 -r 10 -u 1
 Rate of 5 users per second, total requests up to 50 users for 60 seconds,
 
 ```bash
-locust -f ocr.py -P 7001 -H http://localhost:7088 -r 5 -u 50 -t 60
+locust -f ocr.py -P 7001 -H http://localhost:7088 -r 1 -u 50 -t 60
 ```
 
 ### Continuous batching

@@ -130,25 +130,6 @@ app.add_middleware(InsertMiddleware, max_concurrent=args.max_concurrent)
 async def hello_world():
     return {'hello': 'world'}
 
-if args.dynamic_batching:
-    @app.on_event("startup")
-    async def startup_event():
-        app.state.background_doc_layout_step = asyncio.create_task(doc_layout_step())
-        app.state.background_ocr_prefill = asyncio.create_task(ocr_prefill())
-        app.state.background_ocr_step = asyncio.create_task(ocr_step())
-
-    @app.on_event("shutdown")
-    async def shutdown_event():
-        app.state.background_doc_layout_step.cancel()
-        app.state.background_ocr_prefill.cancel()
-        app.state.background_ocr_step.cancel()
-        try:
-            await app.state.background_doc_layout_step
-            await app.state.background_ocr_prefill
-            await app.state.background_ocr_step
-        except asyncio.CancelledError:
-            pass
-
 if args.enable_doc_layout:
     logging.info('enabling document layout')
 
