@@ -171,9 +171,7 @@ if args.enable_doc_layout:
             except asyncio.CancelledError:
                 pass
     
-    if args.hotload:
-        logging.info('hotloading document layout model')
-        doc_layout_load_model()
+    doc_layout_load_model()
 
 if args.enable_ocr:
     logging.info('enabling OCR')
@@ -222,9 +220,7 @@ if args.enable_ocr:
         except asyncio.CancelledError:
             pass
     
-    if args.hotload:
-        logging.info('hotloading OCR model')
-        ocr_load_model()
+    ocr_load_model()
 
 if args.enable_url_to_pdf:
     logging.info('enabling URL to PDF')

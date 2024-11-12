@@ -74,11 +74,6 @@ def parse_arguments():
         help='Maximum concurrent requests (default: %(default)s, env: MAX_CONCURRENT)'
     )
     parser.add_argument(
-        '--hotload', type=lambda x: x.lower() == 'true',
-        default=os.environ.get('HOTLOAD', 'true').lower() == 'true',
-        help='Enable hot loading (default: %(default)s, env: HOTLOAD)'
-    )
-    parser.add_argument(
         '--static-cache', type=lambda x: x.lower() == 'true',
         default=os.environ.get('STATIC_CACHE', 'false').lower() == 'true',
         help='Preallocate KV Cache for faster inference (default: %(default)s, env: STATIC_CACHE)'
