@@ -2,10 +2,9 @@ from transformers import AutoModel, AutoTokenizer
 from sse_starlette import ServerSentEvent
 from dynamicbatch_ragpipeline import ocr_utils
 from dynamicbatch_ragpipeline.env import args
-from dynamicbatch_ragpipeline.function import efficient_attention_mask
-from dynamicbatch_ragpipeline.cache import (
+from transformers_openai.function import efficient_attention_mask
+from transformers_openai.cache import (
     DynamicLengthDecoderCache,
-    StaticLengthDecoderCache,
 )
 from datetime import datetime
 from PIL import Image
@@ -36,30 +35,39 @@ step_queue = asyncio.Queue()
 def load_model():
     global model, tokenizer, global_cache
 
-    if args.model_ocr == 'got_ocr2_0':
-        tokenizer = AutoTokenizer.from_pretrained('ucaslcl/GOT-OCR2_0', trust_remote_code=True)
-        model = AutoModel.from_pretrained(
-            'ucaslcl/GOT-OCR2_0', 
-            trust_remote_code=True,
-            torch_dtype = torch_dtype,
-            attn_implementation = 'sdpa'
-        )
-        model = model.eval().to(device)
+    tokenizer = AutoTokenizer.from_pretrained('ucaslcl/GOT-OCR2_0', trust_remote_code=True)
+    model = AutoModel.from_pretrained(
+        'ucaslcl/GOT-OCR2_0', 
+        trust_remote_code=True,
+        torch_dtype = torch_dtype,
+        attn_implementation = 'sdpa'
+    )
+    model = model.eval().to(device)
+    global_cache = DynamicLengthDecoderCache()
 
-        if args.static_cache:
-            logging.info('initiate static cache')
-            global_cache = StaticLengthDecoderCache(
-                batch_size = args.dynamic_batching_ocr_batch_size, 
-                max_length = args.static_cache_max_length,
-                device = device,
-                head_size = model.config.num_attention_heads,
-                dim_size = model.config.hidden_size // model.config.num_attention_heads,
-                num_hidden_layers = model.config.num_hidden_layers,
-                dtype = model.dtype,
-            )
-        else:
-            logging.info('initiate dynamic cache')
-            global_cache = DynamicLengthDecoderCache()
+    if args.torch_compile:
+        logging.info('enabling torch compile for OCR')
+        
+        model.model.vision_tower_high.forward = torch.compile(
+            model.model.vision_tower_high.forward,
+        )
+        model.model.mm_projector_vary.forward = torch.compile(
+            model.model.mm_projector_vary.forward,
+        )
+        ocr_utils.image_processor_high.transform = torch.compile(
+            ocr_utils.image_processor_high.transform,
+        )
+
+        with torch.no_grad():
+            for i in range(3):
+                logging.info(f'{i}, warming up vision tower')
+                image = torch.zeros(3, 1000, 1000).to(device)
+                image = ocr_utils.image_processor_high(image).unsqueeze(0).type(model.dtype)
+                cnn_feature = model.model.vision_tower_high(image)
+                cnn_feature = cnn_feature.flatten(2).permute(0, 2, 1)
+                model.model.mm_projector_vary(cnn_feature)
+                del cnn_feature
+
 
 async def prefill():
     need_sleep = True
@@ -109,7 +117,8 @@ async def prefill():
                 images = []
                 for i in range(len(input_img)):
                     image = Image.open(BytesIO(input_img[i])).convert('RGB')
-                    image_tensor = ocr_utils.image_processor_high(image).unsqueeze(0).type(model.dtype).to(device)
+                    image = ocr_utils.image_processor_high.to_tensor(image).to(device)
+                    image_tensor = ocr_utils.image_processor_high(image).unsqueeze(0).type(model.dtype)
                     images.append(image_tensor)
                 
                 input_ids = tokenizer(prompts, return_tensors = 'pt', padding = 'longest')
@@ -171,9 +180,7 @@ async def step():
         
         try:
             need_sleep = True
-
             batch = []
-            batch_start_time = time.time()
             while not step_queue.empty():
                 try:
                     request = await asyncio.wait_for(step_queue.get(), timeout=1e-6)
@@ -219,7 +226,7 @@ async def step():
                     return_dict=False
                 )
 
-            out_logits = out[0]
+                out_logits = out[0]
 
             for i in range(len(futures)):
                 futures[i].set_result((out_logits[i, -1:],))

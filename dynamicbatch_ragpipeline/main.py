@@ -20,107 +20,13 @@ from dynamicbatch_ragpipeline.playwright_utils import (
     to_pdf,
     initialize_browser,
 )
+from transformers_openai.middleware import InsertMiddleware
 from pydantic import BaseModel
 import asyncio
 import logging
 import uvicorn
-import uuid
-import time
-import torch
-import os
 import tempfile
-from pathlib import Path
-from collections import deque
 
-
-HEADERS = {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive'
-}
-
-class InsertMiddleware:
-    def __init__(self, app, max_concurrent=50):
-        self.app = app
-        self.max_concurrent = max_concurrent
-        self.semaphore = asyncio.Semaphore(max_concurrent)
-        self.queue = deque()
-
-    async def process_request(self, scope, receive, send):
-        async with self.semaphore:
-
-            log = f"Received request {scope['request']['uuid']} in queue {scope['request']['time_in_queue']} seconds"
-            logging.info(log)
-
-            queue = asyncio.Queue()
-
-            async def message_poller(sentinel, handler_task):
-                nonlocal queue
-                while True:
-                    message = await receive()
-                    if message["type"] == "http.disconnect":
-                        handler_task.cancel()
-                        return sentinel
-                    await queue.put(message)
-
-            sentinel = object()
-            handler_task = asyncio.create_task(self.app(scope, queue.get, send))
-            asyncio.create_task(message_poller(sentinel, handler_task))
-
-            try:
-                await handler_task
-                
-                if 'after_time_taken' in scope['request']:
-                    before_time_taken = scope['request']['before_time_taken']
-                    after_time_taken = scope['request']['after_time_taken']
-                    total_page = scope['request']['total_page']
-
-                    time_taken = after_time_taken - before_time_taken
-                    page_per_second = total_page / time_taken
-
-                    s = f"Complete {scope['request']['uuid']}, time taken {time_taken} seconds, Page per second {page_per_second}"
-                    logging.info(s)
-                
-                if 'time_max_tokens' in scope['request']:
-                    time_taken_first_token = scope['request']['time_first_token'] - \
-                        scope['request']['after_queue']
-                    time_taken_max_tokens = scope['request']['time_max_tokens'] - \
-                        scope['request']['time_first_token']
-                    tps = scope['request']['total_tokens'] / time_taken_max_tokens
-
-                    s = f"Complete {scope['request']['uuid']}, time first token {time_taken_first_token} seconds, time taken {time_taken_max_tokens} seconds, TPS {tps}"
-                    logging.info(s)
-
-            except asyncio.CancelledError:
-                logging.warning(f"Cancelling {scope['request']['uuid']} due to disconnect")
-            finally:
-                torch.cuda.empty_cache()
-    
-    async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
-
-        scope['request'] = {
-            'uuid': str(uuid.uuid4()),
-            'before_queue': time.time()
-        }
-
-        if self.semaphore.locked():
-            logging.debug(f"{scope['request']['uuid']} waiting for queue.")
-            future = asyncio.Future()
-            self.queue.append(future)
-            await future
-
-        scope['request']['after_queue'] = time.time()
-        scope['request']['time_in_queue'] = scope['request']['after_queue'] - \
-            scope['request']['before_queue']
-
-        await self.process_request(scope, receive, send)
-
-        if self.queue:
-            next_request = self.queue.popleft()
-            next_request.set_result(None)
 
 app = FastAPI()
 
@@ -157,21 +63,19 @@ if args.enable_doc_layout:
             )
             return r
 
-    if args.dynamic_batching:
-
-        @app.on_event("startup")
-        async def startup_event():
-            app.state.background_doc_layout_step = asyncio.create_task(doc_layout_step())
-
-        @app.on_event("shutdown")
-        async def shutdown_event():
-            app.state.background_doc_layout_step.cancel()
-            try:
-                await app.state.background_doc_layout_step
-            except asyncio.CancelledError:
-                pass
-    
     doc_layout_load_model()
+
+    @app.on_event("startup")
+    async def startup_event():
+        app.state.background_doc_layout_step = asyncio.create_task(doc_layout_step())
+
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        app.state.background_doc_layout_step.cancel()
+        try:
+            await app.state.background_doc_layout_step
+        except asyncio.CancelledError:
+            pass
 
 if args.enable_ocr:
     logging.info('enabling OCR')
@@ -204,6 +108,8 @@ if args.enable_ocr:
             return EventSourceResponse(r, headers=HEADERS)
         else:
             return r
+
+    ocr_load_model()
     
     @app.on_event("startup")
     async def startup_event():
@@ -219,8 +125,6 @@ if args.enable_ocr:
             await app.state.background_ocr_step
         except asyncio.CancelledError:
             pass
-    
-    ocr_load_model()
 
 if args.enable_url_to_pdf:
     logging.info('enabling URL to PDF')

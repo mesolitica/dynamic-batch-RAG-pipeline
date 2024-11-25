@@ -41,9 +41,9 @@ python3 -m dynamicbatch_ragpipeline.main --help
 ```
 
 ```text
-usage: main.py [-h] [--host HOST] [--port PORT] [--loglevel LOGLEVEL] [--reload RELOAD] [--enable-doc-layout ENABLE_DOC_LAYOUT]
-               [--model-doc-layout MODEL_DOC_LAYOUT] [--enable-ocr ENABLE_OCR] [--model-ocr MODEL_OCR]
-               [--dynamic-batching DYNAMIC_BATCHING] [--dynamic-batching-microsleep DYNAMIC_BATCHING_MICROSLEEP]
+usage: main.py [-h] [--host HOST] [--port PORT] [--loglevel LOGLEVEL] [--reload RELOAD]
+               [--enable-doc-layout ENABLE_DOC_LAYOUT] [--model-doc-layout MODEL_DOC_LAYOUT] [--enable-ocr ENABLE_OCR]
+               [--model-ocr MODEL_OCR] [--dynamic-batching-microsleep DYNAMIC_BATCHING_MICROSLEEP]
                [--dynamic-batching-doc-layout-batch-size DYNAMIC_BATCHING_DOC_LAYOUT_BATCH_SIZE]
                [--dynamic-batching-ocr-batch-size DYNAMIC_BATCHING_OCR_BATCH_SIZE] [--accelerator-type ACCELERATOR_TYPE]
                [--max-concurrent MAX_CONCURRENT] [--static-cache STATIC_CACHE]
@@ -66,8 +66,6 @@ options:
                         Enable OCR (default: True, env: ENABLE_OCR)
   --model-ocr MODEL_OCR
                         Model type (default: got_ocr2_0, env: MODEL_OCR)
-  --dynamic-batching DYNAMIC_BATCHING
-                        Enable dynamic batching (default: True, env: DYNAMIC_BATCHING)
   --dynamic-batching-microsleep DYNAMIC_BATCHING_MICROSLEEP
                         microsleep to group dynamic batching, 1 / 1e-4 = 10k steps for second (default: 0.0001, env:
                         DYNAMIC_BATCHING_MICROSLEEP)
@@ -75,7 +73,8 @@ options:
                         maximum of batch size for document layout during dynamic batching (default: 16, env:
                         DYNAMIC_BATCHING_DOC_LAYOUT_BATCH_SIZE)
   --dynamic-batching-ocr-batch-size DYNAMIC_BATCHING_OCR_BATCH_SIZE
-                        maximum of batch size for OCR during dynamic batching (default: 16, env: DYNAMIC_BATCHING_OCR_BATCH_SIZE)
+                        maximum of batch size for OCR during dynamic batching (default: 16, env:
+                        DYNAMIC_BATCHING_OCR_BATCH_SIZE)
   --accelerator-type ACCELERATOR_TYPE
                         Accelerator type (default: cuda, env: ACCELERATOR_TYPE)
   --max-concurrent MAX_CONCURRENT
@@ -164,18 +163,10 @@ Checkout [notebook/url-to-pdf.ipynb](notebook/url-to-pdf.ipynb).
 
 Rate of 10 users per second, total requests up to 100 users for 60 seconds on a RTX 3090 Ti,
 
-#### Non-dynamic batching
-
-![alt text](stress-test/doc_layout_without_dynamic.png)
-
-#### Dynamic batching
-
-![alt text](stress-test/doc_layout_dynamic.png)
+![alt text](stress-test/doc_layout.png)
 
 ### OCR
 
 Rate of 5 users per second, total requests up to 50 users for 60 seconds,
-
-#### Continuous batching
 
 ![alt text](stress-test/ocr.png)

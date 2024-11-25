@@ -11,3 +11,4 @@ sse_starlette
 playwright
 transformers
 tiktoken
+git+https://github.com/mesolitica/transformers-openai-api.git@0990077672793866128d7ec7d6d5f24778bf999f

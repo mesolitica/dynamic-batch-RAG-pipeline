@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import torch
 
 
 def parse_arguments():
@@ -42,11 +43,6 @@ def parse_arguments():
         '--model-ocr',
         default=os.environ.get('MODEL_OCR', 'got_ocr2_0'),
         help='Model type (default: %(default)s, env: MODEL_OCR)'
-    )
-    parser.add_argument(
-        '--dynamic-batching', type=lambda x: x.lower() == 'true',
-        default=os.environ.get('DYNAMIC_BATCHING', 'true').lower() == 'true',
-        help='Enable dynamic batching (default: %(default)s, env: DYNAMIC_BATCHING)'
     )
     parser.add_argument(
         '--dynamic-batching-microsleep', type=float,
@@ -94,6 +90,11 @@ def parse_arguments():
         default=int(os.environ.get('PLAYWRIGHT_MAX_CONCURRENCY', '1')),
         help='Enable URL to PDF using Playwright (default: %(default)s, env: PLAYWRIGHT_MAX_CONCURRENCY)'
     )
+    parser.add_argument(
+        '--torch-compile', type=lambda x: x.lower() == 'true',
+        default=os.environ.get('TORCH_COMPILE', 'true').lower() == 'false',
+        help='Torch compile necessary forwards, can speed up at least 1.5X (default: %(default)s, env: TORCH_COMPILE)'
+    )
 
     args = parser.parse_args()
 
@@ -103,6 +104,14 @@ def parse_arguments():
     if args.model_ocr not in {'got_ocr2_0'}:
         raise ValueError('Currently OCR, `--model-ocr` or `MODEL_OCR` environment variable, only support https://huggingface.co/stepfun-ai/GOT-OCR2_0')
 
+    device = 'cpu'
+    if args.accelerator_type == 'cuda':
+        if not torch.cuda.is_available():
+            logging.warning('CUDA is not available, fallback to CPU.')
+        else:
+            device = 'cuda'
+
+    args.device = device
     return args
 
 

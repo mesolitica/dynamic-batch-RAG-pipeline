@@ -85,13 +85,13 @@ class GOTImageEvalProcessor:
             std = (0.26862954, 0.26130258, 0.27577711)
 
         self.normalize = transforms.Normalize(mean, std)
+        self.to_tensor = transforms.ToTensor()
 
         self.transform = transforms.Compose(
             [
                 transforms.Resize(
                     (image_size, image_size), interpolation=InterpolationMode.BICUBIC
                 ),
-                transforms.ToTensor(),
                 self.normalize,
             ]
         )

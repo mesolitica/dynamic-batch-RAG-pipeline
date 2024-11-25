@@ -5,17 +5,10 @@
 Rate of 10 users per second, total requests up to 100 users for 60 seconds,
 
 ```bash
-locust -f doc_layout_dynamic.py -P 7001 -H http://localhost:7088 -r 10 -u 100 -t 60
-locust -f doc_layout_without_dynamic.py -P 7001 -H http://localhost:7088 -r 10 -u 100 -t 60
+locust -f doc_layout.py -P 7001 -H http://localhost:7088 -r 10 -u 100 -t 60
 ```
 
-### Non-dynamic batching
-
-![alt text](doc_layout_without_dynamic.png)
-
-### Dynamic batching
-
-![alt text](doc_layout_dynamic.png)
+![alt text](doc_layout.png)
 
 ## OCR on RTX 3090 Ti
 

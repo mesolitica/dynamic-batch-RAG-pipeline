@@ -41,9 +41,12 @@ step_queue = asyncio.Queue()
 def load_model():
     global model
 
-    if args.model_doc_layout == 'yolo10':
-        model_dir = snapshot_download('juliozhao/DocLayout-YOLO-DocStructBench')
-        model = YOLOv10(os.path.join(model_dir, 'doclayout_yolo_docstructbench_imgsz1024.pt'))
+    model_dir = snapshot_download('juliozhao/DocLayout-YOLO-DocStructBench')
+    model = YOLOv10(os.path.join(model_dir, 'doclayout_yolo_docstructbench_imgsz1024.pt'))
+    
+    if args.torch_compile:
+        logging.info('enabling torch compile for doc layout')
+        model.compile()
     
 async def step():
     need_sleep = True
@@ -105,10 +108,6 @@ async def predict(
     ratio_y = 2.0, 
     request = None,
 ):
-    if model is None:
-        load_model()
-
-    request.scope['request']['before_time_taken'] = time.time()
     doc = pymupdf.open(file)
     mat = pymupdf.Matrix(ratio_x, ratio_y)
     futures, images = [], []
@@ -118,31 +117,12 @@ async def predict(
         image = np.frombuffer(pix.samples_mv, dtype=np.uint8).reshape((pix.height, pix.width, 3)).copy()
         images.append(image)
 
-        if args.dynamic_batching:
-            future = asyncio.Future()
-            await step_queue.put((future, image))
-            futures.append(future)
+        future = asyncio.Future()
+        await step_queue.put((future, image))
+        futures.append(future)
     
-    request.scope['request']['toimage_time_taken'] = time.time() - request.scope['request']['before_time_taken']
-    
-    if args.dynamic_batching:
-        results = await asyncio.gather(*futures)
-    else:
-        results = []
-        with torch.no_grad():
-            det_res = model.predict(
-                    images,
-                    imgsz=1024,
-                    conf=0.25,
-                    device=device,
-                    batch=len(images)
-                )
-
-        for i in range(len(det_res)):
-            boxes = det_res[i].__dict__['boxes'].xyxy
-            classes = det_res[i].__dict__['boxes'].cls
-            scores = det_res[i].__dict__['boxes'].conf
-            results.append((boxes, classes, scores))
+    before = time.time()
+    results = await asyncio.gather(*futures)
 
     actual_results = []
     
@@ -185,15 +165,11 @@ async def predict(
         }
         actual_results.append(d)
 
-    request.scope['request']['total_page'] = len(futures)
-    request.scope['request']['after_time_taken'] = time.time()
-    request.scope['request']['infer_time_taken'] = request.scope['request']['after_time_taken'] - request.scope['request']['before_time_taken']
+    after = time.time()
     
     stats = {
         'total_page': len(images),
-        'infer_time_taken': request.scope['request']['infer_time_taken'],
-        'toimage_time_taken': request.scope['request']['toimage_time_taken'],
-        'page_per_second': len(images) / request.scope['request']['infer_time_taken'],
+        'page_per_second': len(images) / (after - before),
     }
     return {
         'result': actual_results,
